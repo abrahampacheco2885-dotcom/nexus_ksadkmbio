@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlCambio AI - Nexus Final</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { background-color: #f3f4f6; font-family: 'Inter', sans-serif; }
+        .app-card { background: white; border-radius: 32px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+        .loader-spin { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div class="max-w-md w-full app-card border border-slate-200 p-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-2xl font-black text-slate-800 tracking-tighter">AlCambio <span class="text-blue-600">AI</span></h1>
+                <p id="dateLabel" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest"></p>
+            </div>
+            <div id="statusIndicator" class="w-3 h-3 bg-slate-300 rounded-full"></div>
+        </div>
+
+        <div class="bg-slate-50 rounded-3xl p-6 mb-8 border border-slate-100">
+            <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Monto a calcular ($)</label>
+            <div class="flex items-center">
+                <span class="text-3xl font-bold text-slate-300 mr-2">$</span>
+                <input type="number" id="usdInput" value="1" class="bg-transparent text-4xl font-black text-slate-800 outline-none w-full">
+            </div>
+        </div>
+
+        <div id="loadingView" class="py-12 text-center">
+            <i class="fas fa-circle-notch loader-spin text-4xl text-blue-600"></i>
+            <p class="mt-4 text-xs font-bold text-slate-400 uppercase tracking-widest">IA Consultando Tasas...</p>
+        </div>
+
+        <div id="resultsView" class="hidden space-y-4">
+            </div>
+
+        <button id="refreshBtn" class="w-full mt-8 py-4 bg-blue-600 text-white text-xs font-bold rounded-2xl shadow-lg shadow-blue-200 active:scale-95 transition-all uppercase tracking-widest">
+            <i class="fas fa-sync-alt mr-2"></i> Actualizar Ahora
+        </button>
+    </div>
+
+    <script type="module">
+        import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+
+        // CONFIGURACIÓN
+        const API_KEY = "AIzaSyD3_Ddq8MO2TZ4UFmL8d9Ys1CJYZDKMhCY";
+        const genAI = new GoogleGenerativeAI(API_KEY);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        let rates = { bcv_usd: 0, bcv_eur: 0, paralelo: 0, binance: 0 };
+
+        // Inicializar fecha
+        document.getElementById('dateLabel').innerText = new Date().toLocaleDateString('es-VE', { weekday: 'short', day: 'numeric', month: 'short' });
+
+        async function updateRates() {
+            const loadingView = document.getElementById('loadingView');
+            const resultsView = document.getElementById('resultsView');
+            const status = document.getElementById('statusIndicator');
+            const btn = document.getElementById('refreshBtn');
+
+            loadingView.classList.remove('hidden');
+            resultsView.classList.add('hidden');
+            status.className = "w-3 h-3 bg-yellow-500 rounded-full animate-pulse";
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+
+            // Prompt siguiendo la guía de Google
+            const prompt = "Dame el precio actual en Venezuela de: 1.Dólar BCV, 2.Euro BCV, 3.Dólar Paralelo, 4.USDT Binance. Responde UNICAMENTE con un JSON en este formato: {'usd':0, 'eur':0, 'par':0, 'bin':0}. Sin texto adicional.";
+
+            try {
+                const result = await model.generateContent(prompt);
+                const response = await result.response;
+                let text = response.text();
+                
+                // Limpiar respuesta por si incluye ```json
+                text = text.replace(/```json|```/g, "").trim();
+                const data = JSON.parse(text);
+
+                rates = {
+                    bcv_usd: data.usd,
+                    bcv_eur: data.eur,
+                    paralelo: data.par,
+                    binance: data.bin
+                };
+
+                renderResults();
+                
+                loadingView.classList.add('hidden');
+                resultsView.classList.remove('hidden');
+                status.className = "w-3 h-3 bg-green-500 rounded-full";
+            } catch (error) {
+                console.error("Nexus Error:", error);
+                status.className = "w-3 h-3 bg-red-500 rounded-full";
+                alert("Error de API. Asegúrate de que tu API Key sea válida en Google AI Studio.");
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+            }
+        }
+
+        function renderResults() {
+            const amount = parseFloat(document.getElementById('usdInput').value) || 0;
+            const container = document.getElementById('resultsView');
+            container.innerHTML = '';
+
+            const config = [
+                { label: 'Dólar BCV', val: rates.bcv_usd, color: 'blue', icon: 'fa-university' },
+                { label: 'Euro BCV', val: rates.bcv_eur, color: 'indigo', icon: 'fa-euro-sign' },
+                { label: 'Paralelo', val: rates.paralelo, color: 'red', icon: 'fa-bolt' },
+                { label: 'Binance P2P', val: rates.binance, color: 'yellow', icon: 'fa-coins' }
+            ];
+
+            config.forEach(item => {
+                const total = (amount * item.val).toLocaleString('es-VE', {minimumFractionDigits: 2});
+                container.innerHTML += `
+                    <div class="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-3xl shadow-sm hover:border-blue-200 transition-colors">
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 bg-${item.color}-500 rounded-2xl flex items-center justify-center text-white">
+                                <i class="fas ${item.icon} text-sm"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-[10px] font-black text-slate-400 uppercase">${item.label}</h3>
+                                <p class="text-xs font-bold text-slate-800">${item.val.toFixed(2)}</p>
+                            </div>
+                        </div>
+                        <p class="text-xl font-black text-slate-800">Bs. ${total}</p>
+                    </div>
+                `;
+            });
+        }
+
+        // Event Listeners
+        document.getElementById('usdInput').addEventListener('input', renderResults);
+        document.getElementById('refreshBtn').addEventListener('click', updateRates);
+
+        // Ejecución Inicial
+        updateRates();
+    </script>
+</body>
+</html>
