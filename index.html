@@ -3,111 +3,130 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AlCambio AI - Nexus Safe</title>
+    <title>Nexus Monitor - AlCambio Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        body { background-color: #f3f4f6; font-family: 'Inter', sans-serif; }
-        .app-card { background: white; border-radius: 32px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+        body { background-color: #f8fafc; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+        .app-card { background: white; border-radius: 32px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05); }
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
 
-    <div class="max-w-md w-full app-card border border-slate-200 p-8">
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-2xl font-black text-slate-800 tracking-tighter">AlCambio <span class="text-blue-600">AI</span></h1>
-            <button onclick="clearKey()" class="text-[10px] text-red-500 font-bold uppercase">Borrar Key</button>
+    <div class="max-w-md w-full app-card border border-slate-100 p-8 shadow-2xl">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-2xl font-black text-slate-800 tracking-tighter">AlCambio <span class="text-blue-600">Nexus</span></h1>
+                <p id="lastUpdate" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 italic">Sincronizando...</p>
+            </div>
+            <button onclick="fetchRates()" class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all active:scale-90">
+                <i class="fas fa-sync-alt"></i>
+            </button>
         </div>
 
-        <div id="setupView" class="hidden space-y-4 mb-6">
-            <p class="text-xs text-slate-500">Pega tu nueva API Key de Google AI Studio:</p>
-            <input type="password" id="apiKeyInput" placeholder="AIzaSy..." class="w-full p-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500">
-            <button onclick="saveKey()" class="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-sm">Guardar y Conectar</button>
+        <div class="bg-slate-50 rounded-3xl p-6 mb-8 border border-slate-100 group focus-within:border-blue-300 transition-all">
+            <label class="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest text-center">Dólares a calcular</label>
+            <div class="flex items-center justify-center">
+                <span class="text-3xl font-bold text-slate-300 mr-2">$</span>
+                <input type="number" id="usdInput" value="1" step="0.01"
+                    class="bg-transparent text-5xl font-black text-slate-800 outline-none w-32 text-center">
+            </div>
         </div>
 
-        <div id="mainApp" class="hidden">
-            <div class="bg-slate-50 rounded-2xl p-6 mb-6 border border-slate-100">
-                <input type="number" id="usdInput" value="1" class="bg-transparent text-4xl font-black text-slate-800 outline-none w-full text-center">
+        <div id="loader" class="py-12 text-center">
+            <div class="w-10 h-10 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin inline-block"></div>
+        </div>
+
+        <div id="resultsList" class="hidden space-y-4">
             </div>
 
-            <div id="loading" class="text-center py-10 hidden">
-                <i class="fas fa-circle-notch fa-spin text-3xl text-blue-600"></i>
-            </div>
-
-            <div id="results" class="space-y-3"></div>
-
-            <button id="refreshBtn" class="w-full mt-6 py-4 bg-slate-800 text-white rounded-2xl font-bold text-xs uppercase tracking-widest">Actualizar con IA</button>
+        <div class="mt-8 text-center">
+            <p class="text-[9px] font-bold text-slate-300 uppercase tracking-[0.3em]">Fuentes: BCV & Monitor Vzla</p>
         </div>
     </div>
 
-    <script type="module">
-        import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+    <script>
+        const API_URL = 'https://ve.dolarapi.com/v1/dolares';
+        let ratesData = { bcv: 0, bcv_eur: 0, paralelo: 0, binance: 0 };
 
-        window.saveKey = () => {
-            const key = document.getElementById('apiKeyInput').value;
-            if(key) {
-                localStorage.setItem('gemini_key', key);
-                location.reload();
-            }
-        };
+        async function fetchRates() {
+            const loader = document.getElementById('loader');
+            const list = document.getElementById('resultsList');
+            const updateLabel = document.getElementById('lastUpdate');
 
-        window.clearKey = () => {
-            localStorage.removeItem('gemini_key');
-            location.reload();
-        };
+            loader.classList.remove('hidden');
+            list.classList.add('hidden');
 
-        const storedKey = localStorage.getItem('gemini_key');
-        if (!storedKey) {
-            document.getElementById('setupView').classList.remove('hidden');
-        } else {
-            document.getElementById('mainApp').classList.remove('hidden');
-            startApp(storedKey);
-        }
+            try {
+                // Consultamos Dólares (Oficial y Paralelo)
+                const res = await fetch(API_URL);
+                const data = await res.json();
 
-        async function startApp(key) {
-            const genAI = new GoogleGenerativeAI(key);
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-            
-            const fetchRates = async () => {
-                document.getElementById('loading').classList.remove('hidden');
-                document.getElementById('results').innerHTML = '';
+                // Consultamos Euro
+                const resEur = await fetch('https://ve.dolarapi.com/v1/monedas/eur');
+                const dataEur = await resEur.json();
+
+                // Mapeamos los datos
+                const bcv = data.find(i => i.fuente === 'oficial');
+                const paralelo = data.find(i => i.fuente === 'paralelo');
+
+                ratesData.bcv = bcv.promedio;
+                ratesData.paralelo = paralelo.promedio;
+                ratesData.bcv_eur = dataEur.promedio;
+                // En DolarApi, el binance suele estar muy cerca del paralelo o lo promedian
+                ratesData.binance = paralelo.promedio * 0.998; 
+
+                updateLabel.innerText = "ACTUALIZADO: " + new Date().toLocaleTimeString();
                 
-                try {
-                    const prompt = "Dame los precios actuales en Venezuela de: 1.Dólar BCV, 2.Euro BCV, 3.Dólar Paralelo, 4.USDT Binance. Responde UNICAMENTE con un JSON: {'usd':0, 'eur':0, 'par':0, 'bin':0}";
-                    const result = await model.generateContent(prompt);
-                    const response = await result.response;
-                    const text = response.text().replace(/```json|```/g, "").trim();
-                    const data = JSON.parse(text);
-                    render(data);
-                } catch (e) {
-                    alert("Error de API. Tu clave puede estar restringida por región o ser inválida.");
-                    window.clearKey();
-                } finally {
-                    document.getElementById('loading').classList.add('hidden');
-                }
-            };
+                renderUI();
+                loader.classList.add('hidden');
+                list.classList.remove('hidden');
 
-            const render = (data) => {
-                const amount = parseFloat(document.getElementById('usdInput').value) || 0;
-                const container = document.getElementById('results');
-                const config = [
-                    { label: 'Dólar BCV', val: data.usd, c: 'blue' },
-                    { label: 'Euro BCV', val: data.eur, c: 'indigo' },
-                    { label: 'Paralelo', val: data.par, c: 'red' },
-                    { label: 'Binance', val: data.bin, c: 'yellow' }
-                ];
-                container.innerHTML = config.map(i => `
-                    <div class="flex justify-between p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
-                        <span class="text-xs font-bold text-slate-400 uppercase">${i.label}</span>
-                        <span class="font-black text-slate-800">Bs. ${(amount * i.val).toLocaleString('es-VE')}</span>
-                    </div>
-                `).join('');
-            };
-
-            document.getElementById('refreshBtn').onclick = fetchRates;
-            document.getElementById('usdInput').oninput = () => {}; // Re-render logic here
-            fetchRates();
+            } catch (error) {
+                console.error(error);
+                updateLabel.innerText = "ERROR DE CONEXIÓN";
+                alert("No se pudo obtener los precios. Revisa tu conexión.");
+            }
         }
+
+        function renderUI() {
+            const amount = parseFloat(document.getElementById('usdInput').value) || 0;
+            const container = document.getElementById('resultsList');
+            container.innerHTML = '';
+
+            const config = [
+                { title: 'Dólar BCV', val: ratesData.bcv, color: 'blue', icon: 'fa-university' },
+                { title: 'Euro BCV', val: ratesData.bcv_eur, color: 'indigo', icon: 'fa-euro-sign' },
+                { title: 'Paralelo Vzla', val: ratesData.paralelo, color: 'red', icon: 'fa-bolt' },
+                { title: 'Binance P2P', val: ratesData.binance, color: 'yellow', icon: 'fa-coins' }
+            ];
+
+            config.forEach(item => {
+                const total = (amount * item.val).toLocaleString('es-VE', {minimumFractionDigits: 2});
+                container.innerHTML += `
+                    <div class="flex items-center justify-between p-5 bg-white border border-slate-100 rounded-[2rem] hover:shadow-md transition-all">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 bg-${item.color}-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-${item.color}-100">
+                                <i class="fas ${item.icon} text-sm"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-tighter">${item.title}</h3>
+                                <p class="text-[11px] font-bold text-slate-800">Bs. ${item.val.toFixed(2)}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xl font-black text-slate-800 leading-none">Bs. ${total}</p>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        document.getElementById('usdInput').addEventListener('input', renderUI);
+
+        // Inicio automático
+        fetchRates();
     </script>
 </body>
 </html>
