@@ -3,148 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KSADKMBIO Monitor - Nexus</title>
+    <title>AlCambio Nexus - Live</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        body { background-color: #f8fafc; font-family: 'Inter', system-ui, sans-serif; }
-        .app-card { background: white; border-radius: 32px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05); }
-        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        .fade-in { animation: fadeIn 0.5s ease-in; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        body { background-color: #f1f5f9; font-family: 'Inter', sans-serif; }
+        .app-card { background: white; border-radius: 2.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.1); }
+        .fade-in { animation: fadeIn 0.6s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
 
-    <div class="max-w-md w-full app-card border border-slate-100 p-8 shadow-2xl">
+    <div class="max-w-md w-full app-card border border-slate-100 p-8 fade-in">
         <div class="flex justify-between items-center mb-8">
             <div>
                 <h1 class="text-2xl font-black text-slate-800 tracking-tighter italic">AlCambio <span class="text-blue-600">Nexus</span></h1>
-                <p id="lastUpdate" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Sincronizando...</p>
+                <p id="status" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Sincronizando...</p>
             </div>
-            <button onclick="fetchRates()" class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all active:scale-90">
+            <button onclick="loadData()" class="w-10 h-10 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 hover:text-blue-600 transition-all active:scale-90">
                 <i class="fas fa-sync-alt"></i>
             </button>
         </div>
 
-        <div class="bg-slate-50 rounded-3xl p-6 mb-8 border border-slate-100 group focus-within:border-blue-300 transition-all">
-            <label class="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest text-center">Monto en Dólares ($)</label>
-            <div class="flex items-center justify-center">
-                <span class="text-3xl font-bold text-slate-300 mr-2">$</span>
-                <input type="number" id="usdInput" value="1" step="0.01"
-                    class="bg-transparent text-5xl font-black text-slate-800 outline-none w-32 text-center">
+        <div class="bg-slate-50 rounded-3xl p-6 mb-8 border border-slate-100 text-center">
+            <p class="text-[10px] font-black text-slate-400 uppercase mb-1">Monto a calcular ($)</p>
+            <input type="number" id="usdInput" value="1" step="0.01" class="bg-transparent text-5xl font-black text-slate-800 outline-none w-full text-center">
+        </div>
+
+        <div id="results" class="space-y-4">
             </div>
-        </div>
 
-        <div id="loader" class="py-12 text-center">
-            <div class="w-10 h-10 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin inline-block"></div>
-            <p class="text-[10px] text-slate-400 font-bold mt-4 uppercase">Obteniendo datos reales...</p>
-        </div>
-
-        <div id="resultsList" class="hidden space-y-4 fade-in"></div>
-
-        <div class="mt-8 text-center">
-            <p class="text-[9px] font-bold text-slate-300 uppercase tracking-[0.3em]">Nexus Intelligence Bridge</p>
-        </div>
+        <p class="mt-8 text-center text-[9px] font-bold text-slate-300 uppercase tracking-widest">Powered by Google Sheets Engine</p>
     </div>
 
     <script>
-        let ratesData = { bcv: 0, bcv_eur: 0, paralelo: 0, binance: 0 };
+        const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTkk8NsAx5y6ucnauQnoghjha9l0cRTZgCupYyBjpJ6_yeHF8ZINYJSwzDwKlHyIjr8JCMXVMERZ0hn/pub?gid=0&single=true&output=csv';
 
-        async function fetchRates() {
-            const loader = document.getElementById('loader');
-            const list = document.getElementById('resultsList');
-            const updateLabel = document.getElementById('lastUpdate');
-
-            loader.classList.remove('hidden');
-            list.classList.add('hidden');
-            updateLabel.innerText = "CONECTANDO...";
-
+        async function loadData() {
+            const status = document.getElementById('status');
             try {
-                // INTENTO 1: API Directa
-                const res = await fetch('https://ve.dolarapi.com/v1/dolares');
-                if (!res.ok) throw new Error('Error en API principal');
-                const data = await res.json();
+                const response = await fetch(CSV_URL);
+                const csvText = await response.text();
+                
+                // Procesar filas del CSV
+                const rows = csvText.split('\n').filter(row => row.trim() !== '');
+                const dataRows = rows.slice(1); // Ignorar cabecera (Fuente, Precio)
 
-                const resEur = await fetch('https://ve.dolarapi.com/v1/monedas/eur');
-                const dataEur = await resEur.json();
+                const rates = dataRows.map(row => {
+                    const cols = row.split(',');
+                    // Limpiar el precio: manejar comas/puntos y quitar símbolos
+                    let priceStr = cols[1] ? cols[1].replace(/[^\d.,]/g, '').replace(',', '.') : "0";
+                    return {
+                        name: cols[0].trim(),
+                        price: parseFloat(priceStr) || 0
+                    };
+                });
 
-                const bcv = data.find(i => i.fuente === 'oficial');
-                const paralelo = data.find(i => i.fuente === 'paralelo');
-
-                ratesData.bcv = bcv.promedio;
-                ratesData.paralelo = paralelo.promedio;
-                ratesData.bcv_eur = dataEur.promedio;
-                ratesData.binance = paralelo.promedio * 0.99; // Estimado P2P
-
-                updateLabel.innerText = "ACTUALIZADO: " + new Date().toLocaleTimeString();
-                renderUI();
-                loader.classList.add('hidden');
-                list.classList.remove('hidden');
-
+                window.currentRates = rates;
+                render();
+                status.innerText = "ACTUALIZADO: " + new Date().toLocaleTimeString();
             } catch (error) {
-                console.warn("Fallo API directa, intentando Proxy...");
-                // INTENTO 2: Proxy de emergencia (AllOrigins) para saltar bloqueos
-                try {
-                    const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent('https://ve.dolarapi.com/v1/dolares');
-                    const res = await fetch(proxyUrl);
-                    const json = await res.json();
-                    const data = JSON.parse(json.contents);
-
-                    const bcv = data.find(i => i.fuente === 'oficial');
-                    const paralelo = data.find(i => i.fuente === 'paralelo');
-
-                    ratesData.bcv = bcv.promedio;
-                    ratesData.paralelo = paralelo.promedio;
-                    ratesData.bcv_eur = bcv.promedio * 1.08; // Estimado Euro
-                    ratesData.binance = paralelo.promedio * 0.99;
-
-                    updateLabel.innerText = "MODO SEGURO ACTIVO";
-                    renderUI();
-                    loader.classList.add('hidden');
-                    list.classList.remove('hidden');
-                } catch (err) {
-                    updateLabel.innerText = "SIN CONEXIÓN";
-                    alert("Las fuentes están saturadas. Intenta en 1 minuto.");
-                }
+                console.error(error);
+                status.innerText = "ERROR DE CONEXIÓN";
             }
         }
 
-        function renderUI() {
+        function render() {
             const amount = parseFloat(document.getElementById('usdInput').value) || 0;
-            const container = document.getElementById('resultsList');
+            const container = document.getElementById('results');
+            if (!window.currentRates) return;
+
             container.innerHTML = '';
+            const icons = ['fa-university', 'fa-euro-sign', 'fa-bolt'];
+            const colors = ['blue', 'indigo', 'red'];
 
-            const config = [
-                { title: 'Dólar BCV', val: ratesData.bcv, color: 'blue', icon: 'fa-university' },
-                { title: 'Euro BCV', val: ratesData.bcv_eur, color: 'indigo', icon: 'fa-euro-sign' },
-                { title: 'Paralelo', val: ratesData.paralelo, color: 'red', icon: 'fa-bolt' },
-                { title: 'Binance P2P', val: ratesData.binance, color: 'yellow', icon: 'fa-coins' }
-            ];
-
-            config.forEach(item => {
-                const total = (amount * item.val).toLocaleString('es-VE', {minimumFractionDigits: 2});
+            window.currentRates.forEach((item, index) => {
+                const total = (amount * item.price).toLocaleString('es-VE', {minimumFractionDigits: 2});
                 container.innerHTML += `
-                    <div class="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-3xl hover:border-blue-200 transition-all shadow-sm">
+                    <div class="flex items-center justify-between p-5 bg-white border border-slate-50 rounded-[2rem] shadow-sm hover:shadow-md transition-all">
                         <div class="flex items-center gap-4">
-                            <div class="w-10 h-10 bg-${item.color}-500 rounded-2xl flex items-center justify-center text-white">
-                                <i class="fas ${item.icon} text-xs"></i>
+                            <div class="w-12 h-12 bg-${colors[index] || 'slate'}-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-${colors[index] || 'slate'}-100">
+                                <i class="fas ${icons[index] || 'fa-money-bill-wave'} text-sm"></i>
                             </div>
                             <div>
-                                <h3 class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">${item.title}</h3>
-                                <p class="text-[11px] font-bold text-slate-800">Tasa: ${item.val.toFixed(2)}</p>
+                                <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-tighter">${item.name}</h3>
+                                <p class="text-[11px] font-bold text-slate-800">Tasa: ${item.price.toFixed(2)}</p>
                             </div>
                         </div>
                         <div class="text-right">
-                            <p class="text-xl font-black text-slate-800 tracking-tight">Bs. ${total}</p>
+                            <p class="text-xl font-black text-slate-800 leading-none">Bs. ${total}</p>
                         </div>
                     </div>
                 `;
             });
         }
 
-        document.getElementById('usdInput').addEventListener('input', renderUI);
-        fetchRates();
+        document.getElementById('usdInput').addEventListener('input', render);
+        window.onload = loadData;
     </script>
 </body>
 </html>
