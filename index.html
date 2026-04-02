@@ -3,53 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AlCambio Nexus - Pro Converter</title>
+    <title>AlCambio Nexus - Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         body { background-color: #f1f5f9; font-family: 'Inter', sans-serif; }
         .app-card { background: white; border-radius: 2.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.1); }
-        .convert-badge { background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 8px; font-size: 10px; font-weight: 800; }
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
 
-    <div class="max-w-md w-full app-card border border-slate-100 p-8">
+    <div class="max-w-md w-full app-card border border-slate-100 p-8 fade-in">
         <div class="flex justify-between items-center mb-6">
             <div>
                 <h1 class="text-2xl font-black text-slate-800 tracking-tighter italic">AlCambio <span class="text-blue-600">Nexus</span></h1>
-                <p id="status" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Sincronizando...</p>
+                <p id="status" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 italic">Sincronizando...</p>
             </div>
             <button onclick="loadData()" class="w-10 h-10 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 hover:text-blue-600 transition-all active:scale-90">
                 <i class="fas fa-sync-alt"></i>
             </button>
         </div>
 
-        <div class="bg-slate-900 rounded-3xl p-6 mb-6 text-center shadow-xl shadow-blue-100">
-            <p class="text-[10px] font-black text-blue-400 uppercase mb-1 tracking-widest">Monto Objetivo</p>
+        <div class="bg-slate-50 rounded-[2rem] p-6 mb-6 border border-slate-100 text-center">
+            <p class="text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Monto a Calcular</p>
             <div class="flex items-center justify-center">
-                <span class="text-2xl font-bold text-blue-500 mr-2">$ / €</span>
-                <input type="number" id="usdInput" value="100" step="1" class="bg-transparent text-5xl font-black text-white outline-none w-40 text-center">
+                <span class="text-2xl font-bold text-slate-300 mr-2">$</span>
+                <input type="number" id="usdInput" value="100" step="1" class="bg-transparent text-5xl font-black text-slate-800 outline-none w-40 text-center">
             </div>
         </div>
 
-        <div id="converterBox" class="mb-8 p-4 bg-blue-50 rounded-3xl border border-blue-100">
-            <h2 class="text-[11px] font-black text-blue-600 uppercase mb-3 text-center tracking-widest">Análisis de Cambio</h2>
-            <div id="conversionResults" class="space-y-2 text-sm text-slate-600 font-medium text-center">
+        <div id="nexusAnalysis" class="mb-6 p-5 bg-blue-600 rounded-[2rem] shadow-lg shadow-blue-200 text-white hidden">
+            <h2 class="text-[10px] font-black uppercase mb-3 opacity-80 tracking-[0.2em] text-center">Calculadora de Cambio</h2>
+            <div id="conversionText" class="space-y-4 text-center">
                 </div>
         </div>
 
         <div id="results" class="space-y-3">
-            <p class="text-center text-slate-400 animate-pulse">Cargando desde Google Sheets...</p>
+            <p class="text-center text-slate-400 py-10 animate-pulse font-bold text-xs uppercase">Cargando motor de tasas...</p>
         </div>
 
-        <p class="mt-8 text-center text-[9px] font-bold text-slate-300 uppercase tracking-widest">Nexus Intelligence v2.0</p>
+        <p class="mt-8 text-center text-[9px] font-bold text-slate-300 uppercase tracking-widest">Powered by Google Sheets Engine</p>
     </div>
 
     <script>
         const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTkk8NsAx5y6ucnauQnoghjha9l0cRTZgCupYyBjpJ6_yeHF8ZINYJSwzDwKlHyIjr8JCMXVMERZ0hn/pub?gid=0&single=true&output=csv';
 
         async function loadData() {
+            const status = document.getElementById('status');
             try {
                 const response = await fetch(CSV_URL);
                 const csvText = await response.text();
@@ -59,43 +61,47 @@
                 window.currentRates = dataRows.map(row => {
                     const cols = row.split(',');
                     let priceStr = cols[1] ? cols[1].replace(/[^\d.,]/g, '').replace(',', '.') : "0";
-                    return { name: cols[0].trim(), price: parseFloat(priceStr) || 0 };
+                    return {
+                        name: cols[0].trim(),
+                        price: parseFloat(priceStr) || 0
+                    };
                 });
 
                 render();
-                document.getElementById('status').innerText = "LIVE: " + new Date().toLocaleTimeString();
+                status.innerText = "ACTUALIZADO: " + new Date().toLocaleTimeString();
             } catch (error) {
-                document.getElementById('status').innerText = "ERROR DE SYNC";
+                status.innerText = "ERROR DE CONEXIÓN";
             }
         }
 
         function render() {
             const amount = parseFloat(document.getElementById('usdInput').value) || 0;
             const container = document.getElementById('results');
-            const convContainer = document.getElementById('conversionResults');
-            if (!window.currentRates) return;
+            const analysisBox = document.getElementById('nexusAnalysis');
+            const conversionText = document.getElementById('conversionText');
+            
+            if (!window.currentRates || window.currentRates.length < 3) return;
 
-            // 1. Renderizar Tasas en Bolívares
+            // Variables de tasas
+            const bcvRate = window.currentRates[0].price;
+            const eurRate = window.currentRates[1].price;
+            const binanceRate = window.currentRates[2].price;
+
+            // 1. Renderizar tarjetas de Bolívares
             container.innerHTML = '';
             const icons = ['fa-university', 'fa-euro-sign', 'fa-bolt'];
             const colors = ['blue', 'indigo', 'red'];
-            
-            let bcvRate = 0, eurRate = 0, binanceRate = 0;
 
             window.currentRates.forEach((item, index) => {
-                if (index === 0) bcvRate = item.price;
-                if (index === 1) eurRate = item.price;
-                if (index === 2) binanceRate = item.price;
-
                 const total = (amount * item.price).toLocaleString('es-VE', {minimumFractionDigits: 2});
                 container.innerHTML += `
-                    <div class="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-3xl shadow-sm">
-                        <div class="flex items-center gap-3">
+                    <div class="flex items-center justify-between p-4 bg-white border border-slate-50 rounded-3xl shadow-sm">
+                        <div class="flex items-center gap-4">
                             <div class="w-10 h-10 bg-${colors[index] || 'slate'}-500 rounded-2xl flex items-center justify-center text-white">
-                                <i class="fas ${icons[index] || 'fa-money-bill'} text-xs"></i>
+                                <i class="fas ${icons[index] || 'fa-money-bill-wave'} text-xs"></i>
                             </div>
                             <div>
-                                <h3 class="text-[9px] font-black text-slate-400 uppercase">${item.name}</h3>
+                                <h3 class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">${item.name}</h3>
                                 <p class="text-[10px] font-bold text-slate-800">Tasa: ${item.price.toFixed(2)}</p>
                             </div>
                         </div>
@@ -104,22 +110,23 @@
                 `;
             });
 
-            // 2. Lógica de Conversión Cruza (Nexus Convert)
-            if (binanceRate > 0 && eurRate > 0) {
-                // Cuantos USDT necesito para obtener X EUROS
-                const usdtNeededForEur = (amount * eurRate) / binanceRate;
-                // Cuantos USDT necesito para obtener X DOLARES BCV
-                const usdtNeededForBcv = (amount * bcvRate) / binanceRate;
+            // 2. LÓGICA DE CONVERSIÓN (TU IDEA)
+            if (binanceRate > 0) {
+                analysisBox.classList.remove('hidden');
+                
+                // Cálculo: (Monto * Tasa Destino) / Tasa Origen
+                const toEur = (amount * eurRate) / binanceRate;
+                const toUsd = (amount * bcvRate) / binanceRate;
 
-                convContainer.innerHTML = `
-                    <div class="p-2">
-                        <p>Para recibir <span class="font-black text-slate-800">${amount} EUR</span></p>
-                        <p class="text-blue-600 font-black text-lg">Cambia ${usdtNeededForEur.toFixed(2)} USDT</p>
+                conversionText.innerHTML = `
+                    <div>
+                        <p class="text-[11px] opacity-90">Para recibir <b>${amount} EUR</b></p>
+                        <p class="text-xl font-black">Cambia ${toEur.toFixed(2)} USDT</p>
                     </div>
-                    <div class="h-[1px] bg-blue-100 w-1/2 mx-auto my-2"></div>
-                    <div class="p-2">
-                        <p>Para recibir <span class="font-black text-slate-800">${amount} USD (BCV)</span></p>
-                        <p class="text-blue-600 font-black text-lg">Cambia ${usdtNeededForBcv.toFixed(2)} USDT</p>
+                    <div class="border-t border-blue-400 opacity-30 my-2"></div>
+                    <div>
+                        <p class="text-[11px] opacity-90">Para recibir <b>${amount} USD (BCV)</b></p>
+                        <p class="text-xl font-black">Cambia ${toUsd.toFixed(2)} USDT</p>
                     </div>
                 `;
             }
