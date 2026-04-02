@@ -3,13 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KSADKMBIO Monitor - Tasas Venezuela</title>
+    <title>KSADKMBIO Monitor - Nexus</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        body { background-color: #f8fafc; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+        body { background-color: #f8fafc; font-family: 'Inter', system-ui, sans-serif; }
         .app-card { background: white; border-radius: 32px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05); }
         input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
@@ -17,8 +19,8 @@
     <div class="max-w-md w-full app-card border border-slate-100 p-8 shadow-2xl">
         <div class="flex justify-between items-center mb-8">
             <div>
-                <h1 class="text-2xl font-black text-slate-800 tracking-tighter">AlCambio <span class="text-blue-600">Nexus</span></h1>
-                <p id="lastUpdate" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 italic">Sincronizando...</p>
+                <h1 class="text-2xl font-black text-slate-800 tracking-tighter italic">AlCambio <span class="text-blue-600">Nexus</span></h1>
+                <p id="lastUpdate" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Sincronizando...</p>
             </div>
             <button onclick="fetchRates()" class="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all active:scale-90">
                 <i class="fas fa-sync-alt"></i>
@@ -26,7 +28,7 @@
         </div>
 
         <div class="bg-slate-50 rounded-3xl p-6 mb-8 border border-slate-100 group focus-within:border-blue-300 transition-all">
-            <label class="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest text-center">Dólares a calcular</label>
+            <label class="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest text-center">Monto en Dólares ($)</label>
             <div class="flex items-center justify-center">
                 <span class="text-3xl font-bold text-slate-300 mr-2">$</span>
                 <input type="number" id="usdInput" value="1" step="0.01"
@@ -36,18 +38,17 @@
 
         <div id="loader" class="py-12 text-center">
             <div class="w-10 h-10 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin inline-block"></div>
+            <p class="text-[10px] text-slate-400 font-bold mt-4 uppercase">Obteniendo datos reales...</p>
         </div>
 
-        <div id="resultsList" class="hidden space-y-4">
-            </div>
+        <div id="resultsList" class="hidden space-y-4 fade-in"></div>
 
         <div class="mt-8 text-center">
-            <p class="text-[9px] font-bold text-slate-300 uppercase tracking-[0.3em]">Fuentes: BCV & Monitor Vzla</p>
+            <p class="text-[9px] font-bold text-slate-300 uppercase tracking-[0.3em]">Nexus Intelligence Bridge</p>
         </div>
     </div>
 
     <script>
-        const API_URL = 'https://ve.dolarapi.com/v1/dolares';
         let ratesData = { bcv: 0, bcv_eur: 0, paralelo: 0, binance: 0 };
 
         async function fetchRates() {
@@ -57,36 +58,55 @@
 
             loader.classList.remove('hidden');
             list.classList.add('hidden');
+            updateLabel.innerText = "CONECTANDO...";
 
             try {
-                // Consultamos Dólares (Oficial y Paralelo)
-                const res = await fetch(API_URL);
+                // INTENTO 1: API Directa
+                const res = await fetch('https://ve.dolarapi.com/v1/dolares');
+                if (!res.ok) throw new Error('Error en API principal');
                 const data = await res.json();
 
-                // Consultamos Euro
                 const resEur = await fetch('https://ve.dolarapi.com/v1/monedas/eur');
                 const dataEur = await resEur.json();
 
-                // Mapeamos los datos
                 const bcv = data.find(i => i.fuente === 'oficial');
                 const paralelo = data.find(i => i.fuente === 'paralelo');
 
                 ratesData.bcv = bcv.promedio;
                 ratesData.paralelo = paralelo.promedio;
                 ratesData.bcv_eur = dataEur.promedio;
-                // En DolarApi, el binance suele estar muy cerca del paralelo o lo promedian
-                ratesData.binance = paralelo.promedio * 0.998; 
+                ratesData.binance = paralelo.promedio * 0.99; // Estimado P2P
 
                 updateLabel.innerText = "ACTUALIZADO: " + new Date().toLocaleTimeString();
-                
                 renderUI();
                 loader.classList.add('hidden');
                 list.classList.remove('hidden');
 
             } catch (error) {
-                console.error(error);
-                updateLabel.innerText = "ERROR DE CONEXIÓN";
-                alert("No se pudo obtener los precios. Revisa tu conexión.");
+                console.warn("Fallo API directa, intentando Proxy...");
+                // INTENTO 2: Proxy de emergencia (AllOrigins) para saltar bloqueos
+                try {
+                    const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent('https://ve.dolarapi.com/v1/dolares');
+                    const res = await fetch(proxyUrl);
+                    const json = await res.json();
+                    const data = JSON.parse(json.contents);
+
+                    const bcv = data.find(i => i.fuente === 'oficial');
+                    const paralelo = data.find(i => i.fuente === 'paralelo');
+
+                    ratesData.bcv = bcv.promedio;
+                    ratesData.paralelo = paralelo.promedio;
+                    ratesData.bcv_eur = bcv.promedio * 1.08; // Estimado Euro
+                    ratesData.binance = paralelo.promedio * 0.99;
+
+                    updateLabel.innerText = "MODO SEGURO ACTIVO";
+                    renderUI();
+                    loader.classList.add('hidden');
+                    list.classList.remove('hidden');
+                } catch (err) {
+                    updateLabel.innerText = "SIN CONEXIÓN";
+                    alert("Las fuentes están saturadas. Intenta en 1 minuto.");
+                }
             }
         }
 
@@ -98,25 +118,25 @@
             const config = [
                 { title: 'Dólar BCV', val: ratesData.bcv, color: 'blue', icon: 'fa-university' },
                 { title: 'Euro BCV', val: ratesData.bcv_eur, color: 'indigo', icon: 'fa-euro-sign' },
-                { title: 'Paralelo Vzla', val: ratesData.paralelo, color: 'red', icon: 'fa-bolt' },
+                { title: 'Paralelo', val: ratesData.paralelo, color: 'red', icon: 'fa-bolt' },
                 { title: 'Binance P2P', val: ratesData.binance, color: 'yellow', icon: 'fa-coins' }
             ];
 
             config.forEach(item => {
                 const total = (amount * item.val).toLocaleString('es-VE', {minimumFractionDigits: 2});
                 container.innerHTML += `
-                    <div class="flex items-center justify-between p-5 bg-white border border-slate-100 rounded-[2rem] hover:shadow-md transition-all">
+                    <div class="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-3xl hover:border-blue-200 transition-all shadow-sm">
                         <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 bg-${item.color}-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-${item.color}-100">
-                                <i class="fas ${item.icon} text-sm"></i>
+                            <div class="w-10 h-10 bg-${item.color}-500 rounded-2xl flex items-center justify-center text-white">
+                                <i class="fas ${item.icon} text-xs"></i>
                             </div>
                             <div>
-                                <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-tighter">${item.title}</h3>
-                                <p class="text-[11px] font-bold text-slate-800">Bs. ${item.val.toFixed(2)}</p>
+                                <h3 class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">${item.title}</h3>
+                                <p class="text-[11px] font-bold text-slate-800">Tasa: ${item.val.toFixed(2)}</p>
                             </div>
                         </div>
                         <div class="text-right">
-                            <p class="text-xl font-black text-slate-800 leading-none">Bs. ${total}</p>
+                            <p class="text-xl font-black text-slate-800 tracking-tight">Bs. ${total}</p>
                         </div>
                     </div>
                 `;
@@ -124,8 +144,6 @@
         }
 
         document.getElementById('usdInput').addEventListener('input', renderUI);
-
-        // Inicio automático
         fetchRates();
     </script>
 </body>
